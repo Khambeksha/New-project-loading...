@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ping Pong</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f2f4f6;--ink:#1c2733;--muted:#667585;--court:#0f766e;--mark:rgba(255,255,255,.6);--ball:#fff;--you:#fff;--cpu:#f4c27a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10171e;--ink:#e8eef3;--muted:#8fa0b1;--court:#0b4f4a}}
+:root[data-theme="dark"]{--bg:#10171e;--ink:#e8eef3;--muted:#8fa0b1;--court:#0b4f4a}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;padding:1rem;box-sizing:border-box}
+h1{font-size:1.25rem;margin:0;font-weight:600}
+canvas{width:100%;max-width:800px;height:auto;aspect-ratio:8/5;border-radius:10px;background:var(--court);touch-action:none;cursor:none}
+p{margin:0;color:var(--muted);font-size:.9rem;text-align:center}
+</style>
+</head>
+<body>
+<h1>Ping Pong</h1>
+<canvas id="c" width="800" height="500" tabindex="0" aria-label="Ping pong game"></canvas>
+<p>Move your mouse or finger, or use W / S or the arrow keys. Space pauses. First to 7 wins.</p>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d'),W=800,H=500,PH=90,PW=12,R=8,WIN=7;
+const you={x:20,y:H/2-PH/2,s:0},cpu={x:W-20-PW,y:H/2-PH/2,s:0};
+const ball={x:W/2,y:H/2,vx:0,vy:0};
+let state='ready',serveIn=0,keys={},msg='Click, tap or press Space to start';
+function serve(dir){
+  ball.x=W/2;ball.y=H/2;
+  const a=(Math.random()-.5)*0.8;
+  ball.vx=dir*5*Math.cos(a);ball.vy=5*Math.sin(a);serveIn=45;
+}
+function reset(){you.s=cpu.s=0;you.y=cpu.y=H/2-PH/2;serve(Math.random()<.5?1:-1);state='play';}
+function toggle(){
+  if(state==='ready'||state==='over')reset();
+  else if(state==='play'){state='pause';msg='Paused. Press Space or tap to resume';}
+  else if(state==='pause')state='play';
+}
+function clamp(v){return Math.max(0,Math.min(H-PH,v));}
+function pointer(e){
+  const r=c.getBoundingClientRect(),t=e.touches?e.touches[0]:e;
+  you.y=clamp((t.clientY-r.top)*(H/r.height)-PH/2);
+}
+c.addEventListener('mousemove',pointer);
+c.addEventListener('touchmove',e=>{e.preventDefault();pointer(e)},{passive:false});
+c.addEventListener('touchstart',e=>{pointer(e)},{passive:true});
+c.addEventListener('click',toggle);
+addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.key===' '){e.preventDefault();toggle();}
+  if(['arrowup','arrowdown'].includes(e.key.toLowerCase()))e.preventDefault();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+function hit(p,dir){
+  if(ball.vx*dir<=0)return;
+  if(ball.x+R>=p.x&&ball.x-R<=p.x+PW&&ball.y+R>=p.y&&ball.y-R<=p.y+PH){
+    const off=(ball.y-(p.y+PH/2))/(PH/2),sp=Math.min(13,Math.hypot(ball.vx,ball.vy)*1.06);
+    const ang=off*Math.PI/4;
+    ball.vx=-dir*sp*Math.cos(ang);ball.vy=sp*Math.sin(ang);
+    ball.x=dir>0?p.x-R:p.x+PW+R;
+  }
+}
+function update(){
+  if(keys['w']||keys['arrowup'])you.y=clamp(you.y-7);
+  if(keys['s']||keys['arrowdown'])you.y=clamp(you.y+7);
+  if(serveIn>0){serveIn--;}
+  else{
+    ball.x+=ball.vx;ball.y+=ball.vy;
+    if(ball.y<R){ball.y=R;ball.vy*=-1;}
+    if(ball.y>H-R){ball.y=H-R;ball.vy*=-1;}
+    hit(you,-1);hit(cpu,1);
+    if(ball.x<-R){cpu.s++;point(1);}
+    if(ball.x>W+R){you.s++;point(-1);}
+  }
+  const target=ball.vx>0?ball.y-PH/2:H/2-PH/2,d=target-cpu.y;
+  cpu.y=clamp(cpu.y+Math.max(-4.4,Math.min(4.4,d*.12)));
+}
+function point(dir){
+  if(you.s>=WIN||cpu.s>=WIN){state='over';msg=(you.s>cpu.s?'You win!':'Computer wins.')+' Click or press Space to play again';ball.vx=ball.vy=0;}
+  else serve(dir);
+}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function draw(){
+  x.clearRect(0,0,W,H);
+  x.fillStyle=css('--court');x.fillRect(0,0,W,H);
+  x.strokeStyle=css('--mark');x.lineWidth=3;x.setLineDash([12,14]);
+  x.beginPath();x.moveTo(W/2,0);x.lineTo(W/2,H);x.stroke();x.setLineDash([]);
+  x.strokeRect(1.5,1.5,W-3,H-3);
+  x.fillStyle=css('--mark');x.font='600 56px system-ui,sans-serif';x.textAlign='center';
+  x.fillText(you.s,W/2-70,70);x.fillText(cpu.s,W/2+70,70);
+  x.fillStyle=css('--you');x.fillRect(you.x,you.y,PW,PH);
+  x.fillStyle=css('--cpu');x.fillRect(cpu.x,cpu.y,PW,PH);
+  x.fillStyle=css('--ball');x.beginPath();x.arc(ball.x,ball.y,R,0,7);x.fill();
+  if(state!=='play'){
+    x.fillStyle='rgba(0,0,0,.45)';x.fillRect(0,H/2-34,W,68);
+    x.fillStyle='#fff';x.font='500 22px system-ui,sans-serif';x.fillText(msg,W/2,H/2+8);
+  }
+}
+function loop(){if(state==='play')update();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>
